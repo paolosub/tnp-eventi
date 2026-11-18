@@ -9,6 +9,18 @@
  * Requires Plugins: newsletter, contact-form-7
  */
 
+require_once plugin_dir_path( __FILE__ ) . 'plugin-update-checker/plugin-update-checker.php';
+use YahnisElsts\PluginUpdateChecker\v6\PucFactory;
+
+$myUpdateChecker = PucFactory::buildUpdateChecker(
+    'https://github.com/paolosub/tnp-eventi/',
+    __FILE__,
+    'tnp-eventi'
+);
+
+$myUpdateChecker->setBranch('main');
+$myUpdateChecker->getVcsApi()->enableReleaseAssets();
+
 defined('ABSPATH') || exit;
 
 const TNP_EVENTI_OPZIONE_LISTA = 'tnp_eventi_lista_newsletter';
