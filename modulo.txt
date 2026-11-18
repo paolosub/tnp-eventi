@@ -1,0 +1,21 @@
+<div class="tnp-evento">
+[text* your-name autocomplete:given-name placeholder "Nome"]
+[text* your-surname autocomplete:family-name placeholder "Cognome"]
+[email* your-email autocomplete:email placeholder "Email"]
+
+<div class="tnp-evento-casella">
+[acceptance privacy] Autorizzo il trattamento dei miei dati personali contenuti nel form. [/acceptance]
+<a href="URL_PRIVACY" target="_blank" rel="noopener">Leggi la Privacy Policy</a>
+</div>
+
+<div class="tnp-evento-casella">
+[acceptance condizioni] Accetto le condizioni di prenotazione agli eventi. [/acceptance]
+<a href="URL_CONDIZIONI" target="_blank" rel="noopener">Leggi le condizioni di prenotazione agli eventi</a>
+</div>
+
+<div class="tnp-evento-casella">
+[checkbox newsletter use_label_element "Voglio ricevere anche la newsletter."]
+</div>
+
+[submit "PRENOTA L'EVENTO"]
+</div>
