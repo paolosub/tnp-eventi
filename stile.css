@@ -81,3 +81,12 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* Campo trappola per i programmi automatici: le persone non lo vedono */
+.tnp-evento .tnp-evento-hp {
+  position: absolute !important;
+  left: -9999px !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}

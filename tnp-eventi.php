@@ -2,32 +2,80 @@
 /**
  * Plugin Name: TNP Eventi
  * Description: Iscrizioni agli eventi da Contact Form 7 e promemoria programmati in The Newsletter Plugin.
- * Version: 0.2.2
+ * Version: 0.2.3
  * Author: Paolo Subioli
  * Requires at least: 6.1
  * Requires PHP: 7.4
  * Requires Plugins: newsletter, contact-form-7
  */
 
-require_once plugin_dir_path( __FILE__ ) . 'plugin-update-checker/plugin-update-checker.php';
-use YahnisElsts\PluginUpdateChecker\v6\PucFactory;
-
-$myUpdateChecker = PucFactory::buildUpdateChecker(
-    'https://github.com/paolosub/tnp-eventi/',
-    __FILE__,
-    'tnp-eventi'
-);
-
-$myUpdateChecker->setBranch('main');
-$myUpdateChecker->getVcsApi()->enableReleaseAssets();
-
 defined('ABSPATH') || exit;
 
 const TNP_EVENTI_OPZIONE_LISTA = 'tnp_eventi_lista_newsletter';
 const TNP_EVENTI_OPZIONE_ESCLUSI = 'tnp_eventi_esclusi';
 const TNP_EVENTI_MAX_ESCLUSI = 200;
+const TNP_EVENTI_PERMESSO = 'tnp_eventi_gestire';
+const TNP_EVENTI_RUOLO = 'tnp_gestore_eventi';
+const TNP_EVENTI_VERSIONE_RUOLI = '1';
+const TNP_EVENTI_MAX_INVII_ORA = 10;
+
+/*
+ * Aggiornamenti da GitHub: solo dalle release con lo zip tnp-eventi.zip allegato,
+ * mai dal codice del ramo. Se la libreria manca il plugin funziona lo stesso, senza aggiornamenti.
+ */
+if (is_readable(__DIR__ . '/plugin-update-checker/plugin-update-checker.php')) {
+    require_once __DIR__ . '/plugin-update-checker/plugin-update-checker.php';
+    $tnp_eventi_aggiornamenti = \YahnisElsts\PluginUpdateChecker\v6\PucFactory::buildUpdateChecker(
+            'https://github.com/paolosub/tnp-eventi/',
+            __FILE__,
+            'tnp-eventi'
+    );
+    $tnp_eventi_aggiornamenti->setBranch('main');
+    $tnp_eventi_aggiornamenti->getVcsApi()->enableReleaseAssets(
+            '/^tnp-eventi\.zip$/',
+            \YahnisElsts\PluginUpdateChecker\v6p0\Vcs\Api::REQUIRE_RELEASE_ASSETS
+    );
+    unset($tnp_eventi_aggiornamenti);
+}
 
 require_once __DIR__ . '/eventi.php';
+
+/* Permesso e ruolo "Gestore eventi": per usare la pagina Eventi non serve essere amministratori */
+
+function tnp_eventi_installa_ruoli() {
+    $amministratore = get_role('administrator');
+    if ($amministratore) {
+        $amministratore->add_cap(TNP_EVENTI_PERMESSO);
+    }
+    if (!get_role(TNP_EVENTI_RUOLO)) {
+        add_role(TNP_EVENTI_RUOLO, 'Gestore eventi', ['read' => true, TNP_EVENTI_PERMESSO => true]);
+    }
+    update_option('tnp_eventi_ruoli', TNP_EVENTI_VERSIONE_RUOLI, false);
+}
+
+function tnp_eventi_disinstalla() {
+    remove_role(TNP_EVENTI_RUOLO);
+    $amministratore = get_role('administrator');
+    if ($amministratore) {
+        $amministratore->remove_cap(TNP_EVENTI_PERMESSO);
+    }
+    delete_option('tnp_eventi_ruoli');
+}
+
+register_activation_hook(__FILE__, 'tnp_eventi_installa_ruoli');
+register_uninstall_hook(__FILE__, 'tnp_eventi_disinstalla');
+
+// Un aggiornamento non riattiva il plugin: il ruolo si crea anche qui, una volta sola.
+add_action('init', function () {
+    if (get_option('tnp_eventi_ruoli') !== TNP_EVENTI_VERSIONE_RUOLI) {
+        tnp_eventi_installa_ruoli();
+    }
+});
+
+// WooCommerce manda fuori dalla bacheca chi non può scrivere articoli: il Gestore eventi deve poter entrare.
+add_filter('woocommerce_prevent_admin_access', function ($blocca) {
+    return current_user_can(TNP_EVENTI_PERMESSO) ? false : $blocca;
+});
 
 /**
  * Controlla che The Newsletter Plugin esponga ancora ciò che usiamo: sono funzioni
@@ -183,6 +231,46 @@ function tnp_eventi_registra_escluso($lista, $email, $motivo) {
     update_option(TNP_EVENTI_OPZIONE_ESCLUSI, $esclusi, false);
 }
 
+/* Antispam sui moduli degli eventi: campo nascosto e limite di invii per indirizzo IP */
+
+add_filter('wpcf7_spam', 'tnp_eventi_antispam', 20, 2);
+
+function tnp_eventi_antispam($spam, $invio = null) {
+    if ($spam || !is_object($invio) || !method_exists($invio, 'get_contact_form')) {
+        return $spam;
+    }
+    $modulo = $invio->get_contact_form();
+    if (!$modulo || empty($modulo->additional_setting('tnp_lista_evento'))) {
+        return $spam;
+    }
+
+    $motivo = '';
+    $dati = $invio->get_posted_data();
+    // Il campo "sito-web" è invisibile: lo compilano solo i programmi automatici.
+    if (!empty($dati['sito-web'])) {
+        $motivo = 'campo nascosto compilato';
+    } else {
+        $ip = (string) $invio->get_meta('remote_ip');
+        if ($ip !== '') {
+            $chiave = 'tnp_eventi_invii_' . md5($ip . wp_salt('nonce'));
+            $invii = (int) get_transient($chiave);
+            if ($invii >= TNP_EVENTI_MAX_INVII_ORA) {
+                $motivo = 'troppi invii dallo stesso indirizzo in un\'ora';
+            } else {
+                set_transient($chiave, $invii + 1, HOUR_IN_SECONDS);
+            }
+        }
+    }
+
+    if ($motivo === '') {
+        return $spam;
+    }
+    if (method_exists($invio, 'add_spam_log')) {
+        $invio->add_spam_log(['agent' => 'tnp-eventi', 'reason' => $motivo]);
+    }
+    return true;
+}
+
 /* Iscrizioni dai moduli di Contact Form 7 */
 
 add_action('wpcf7_before_send_mail', 'tnp_eventi_gestisci_iscrizione', 10, 3);
@@ -262,7 +350,7 @@ function tnp_eventi_gestisci_iscrizione($modulo, &$abort, $invio) {
 
 add_action('rest_api_init', function () {
     $permesso = function () {
-        return current_user_can('manage_options');
+        return current_user_can(tnp_eventi_permesso());
     };
 
     register_rest_route('tnp-eventi/v1', '/promemoria', [
@@ -312,6 +400,10 @@ function tnp_eventi_crea_promemoria(WP_REST_Request $richiesta) {
     $evento = sanitize_text_field((string) $richiesta->get_param('evento'));
     $oggetto = sanitize_text_field((string) $richiesta->get_param('oggetto'));
     $html = (string) $richiesta->get_param('html');
+    // Chi non è amministratore non può mettere script o moduli nelle email.
+    if (!current_user_can('unfiltered_html')) {
+        $html = wp_kses_post($html);
+    }
 
     if (!tnp_eventi_lista_valida($lista) || $lista === tnp_eventi_lista_newsletter()) {
         return new WP_Error('tnp_eventi_lista', 'Serve una lista di evento valida, diversa da quella della newsletter.', ['status' => 400]);

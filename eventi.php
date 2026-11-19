@@ -12,7 +12,7 @@ add_action('init', function () {
 });
 
 function tnp_eventi_permesso() {
-    return apply_filters('tnp_eventi_permesso', 'manage_options');
+    return apply_filters('tnp_eventi_permesso', TNP_EVENTI_PERMESSO);
 }
 
 /* Liste */

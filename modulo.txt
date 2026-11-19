@@ -2,6 +2,7 @@
 [text* your-name autocomplete:given-name placeholder "Nome"]
 [text* your-surname autocomplete:family-name placeholder "Cognome"]
 [email* your-email autocomplete:email placeholder "Email"]
+<div class="tnp-evento-hp" aria-hidden="true">[text sito-web tabindex:-1 autocomplete:off]</div>
 
 <div class="tnp-evento-casella">
 [acceptance privacy] Autorizzo il trattamento dei miei dati personali contenuti nel form. [/acceptance]
